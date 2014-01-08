@@ -877,7 +877,7 @@ class TestAccountAcls(unittest.TestCase):
 
         # The account being accessed will have account ACLs
         acl = {'admin': ['AUTH_admin'], 'read-write': ['AUTH_rw'],
-               'read-only': ['AUTH_ro']}
+               'read-only': ['AUTH_ro'], 'list-containers': ['AUTH_lc']}
         header_data = {'core-access-control':
                        format_acl(version=2, acl_dict=acl)}
         acls = kwargs.pop('acls', header_data)
@@ -988,6 +988,40 @@ class TestAccountAcls(unittest.TestCase):
                 self.assertFalse(req.environ.get('swift_owner'))
             for method in ('PUT', 'POST', 'DELETE'):
                 req = self._make_request(target, user_groups="AUTH_ro",
+                                         environ={'REQUEST_METHOD': method})
+                resp = req.get_response(test_auth)
+                self.assertEquals(resp.status_int, 403)
+                # swift_owner should NOT be set to True for the ReadOnly ACL
+                self.assertFalse(req.environ.get('swift_owner'))
+
+    def test_list_containers_privileges(self):
+        test_auth = auth.filter_factory({'user_lc_user': 'testing'})(
+            FakeApp(iter(NO_CONTENT_RESP * 9)))
+
+        # ListContainers user should NOT be able to PUT, POST, or DELETE to
+        # account.
+        for target in ('/v1/AUTH_otheracct',):
+            for method in ('GET', 'HEAD', 'OPTIONS'):
+                req = self._make_request(target, user_groups="AUTH_lc",
+                                         environ={'REQUEST_METHOD': method})
+                resp = req.get_response(test_auth)
+                self.assertEquals(resp.status_int, 204)
+                # swift_owner should NOT be set to True for the ReadOnly ACL
+                self.assertFalse(req.environ.get('swift_owner'))
+            for method in ('PUT', 'POST', 'DELETE'):
+                req = self._make_request(target, user_groups="AUTH_ro",
+                                         environ={'REQUEST_METHOD': method})
+                resp = req.get_response(test_auth)
+                self.assertEquals(resp.status_int, 403)
+                # swift_owner should NOT be set to True for the ReadOnly ACL
+                self.assertFalse(req.environ.get('swift_owner'))
+
+        # ListContainers user should NOT be able to do any operation on
+        # containers or objects
+        for target in ('/v1/AUTH_otheracct/cont',
+                       '/v1/AUTH_otheracct/cont/obj'):
+            for method in ('GET', 'HEAD', 'PUT', 'POST', 'DELETE'):
+                req = self._make_request(target, user_groups="AUTH_lc",
                                          environ={'REQUEST_METHOD': method})
                 resp = req.get_response(test_auth)
                 self.assertEquals(resp.status_int, 403)

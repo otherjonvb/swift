@@ -51,8 +51,9 @@ if an authenticated user has membership in a group which is listed in the
 ACL, then the user is allowed the access level of that ACL.
 
 Account ACLs use the "V2" ACL syntax, which is a JSON dictionary with keys
-named "admin", "read-write", and "read-only".  (Note the case sensitivity.)
-An example value for the ``X-Account-Access-Control`` header looks like this:
+named "admin", "read-write", "read-only", and "list-containers".  (Note the
+case sensitivity.)  An example value for the ``X-Account-Access-Control``
+header looks like this:
 ``{"admin":["a","b"],"read-only":["c"]}``  Keys may be absent (as shown).
 The recommended way to generate ACL strings is as follows::
 
@@ -72,6 +73,13 @@ have the following meanings:
 ============   ==============================================================
 Access Level   Description
 ============   ==============================================================
+list-containers These identities can perform a GET or HEAD on the account
+                itself, in order to get a list of containers.  These responses
+                contain all the usual (unprivileged) account metadata, as well
+                as the list of containers.  No permissions are granted on any
+                containers or objects.  (To grant certain permissions on
+                certain containers, it may be useful to combine the use of
+                container ACLs.)
 read-only      These identities can read *everything* (except privileged
                headers) in the account.  Specifically, a user with read-only
 	       account access can get a list of containers in the account,

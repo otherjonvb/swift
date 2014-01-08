@@ -79,6 +79,10 @@ class TempAuth(object):
         * Admin: Users with admin access are swift_owners and can perform
           any action, including viewing/setting privileged metadata (e.g.
           changing account ACLs).
+        * List-Containers: Users with list-containers access may perform a
+          GET (or HEAD) on the *account* to list the containers in the
+          account.  All non-privileged account headers will be returned,
+          along with the body of the response showing the container names.
 
     To generate headers for setting an account ACL::
 
@@ -448,6 +452,11 @@ class TempAuth(object):
                     req.method in ('GET', 'HEAD')):
                 self.logger.debug('User %s allowed by X-Account-Access-Control'
                                   ' (read-only)' % account_user)
+                return None
+            if (user_group_set.intersection(acct_acls['list-containers']) and
+                    req.method in ('GET', 'HEAD') and not container):
+                self.logger.debug('User %s allowed by X-Account-Access-Control'
+                                  ' (list-containers)' % account_user)
                 return None
 
         return self.denied_response(req)

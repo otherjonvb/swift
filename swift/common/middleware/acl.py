@@ -274,21 +274,46 @@ def acls_from_account_info(info):
 
     :param info: a dict of the form returned by get_account_info
     :returns: None (no ACL system metadata is set), or a dict of the form::
-       {'admin': [...], 'read-write': [...], 'read-only': [...]}
+       {'admin': [...], 'read-write': [...], 'read-only': [...],
+        'list-containers': [...]}
 
     :raises ValueError: on a syntactically invalid header
     """
-    acl = parse_acl(
-        version=2, data=info.get('sysmeta', {}).get('core-access-control'))
-    if acl is None:
+    data = info.get('sysmeta', {}).get('core-access-control')
+    acl_dict = parse_acl(version=2, data=data)
+    if acl_dict is None:
         return None
-    admin_members = acl.get('admin', [])
-    readwrite_members = acl.get('read-write', [])
-    readonly_members = acl.get('read-only', [])
-    if not any((admin_members, readwrite_members, readonly_members)):
+    if not (acl_dict or data in ('', '{}')):
+        # parse_acl returned nothing but data wasn't empty -- json error
+        raise ValueError('Syntax error in ACL (%r)' % data)
+    return dict_to_tempauth_acl(acl_dict)
+
+
+def dict_to_tempauth_acl(input_dict):
+    """
+    Validate and canonicalize input_dict as a TempAuth-style account ACL.
+
+    :param input_dict: a dict containing a TempAuth-style account ACL
+    :returns: None for empty input (input was None or {})
+    :returns: input_dict if it was a valid TempAuth-style account ACL of the
+       form::
+       {'admin': [...], 'read-write': [...], 'read-only': [...],
+        'list-containers': [...]}
+    :raises ValueError: if input_dict contains any invalid keys
+    :raises ValueError: if input_dict contains valid TempAuth ACL keys but
+       those keys don't map to valid values
+    """
+    if not input_dict:
         return None
-    return {
-        'admin': admin_members,
-        'read-write': readwrite_members,
-        'read-only': readonly_members,
-    }
+    acl_dict = {}
+    access_classes = 'admin read-write read-only list-containers'.split()
+    for access_class in access_classes:
+        members = input_dict.get(access_class, [])
+        if not isinstance(members, list):
+            raise ValueError('Value of %r (%r) must be a list' %
+                             (access_class, members))
+        acl_dict[access_class] = members
+    bad_keys = [key for key in input_dict.keys() if key not in access_classes]
+    if bad_keys:
+        raise ValueError('Unknown access class: %s' % ', '.join(bad_keys))
+    return acl_dict
