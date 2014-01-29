@@ -191,19 +191,6 @@ class TestAccountController(unittest.TestCase):
                     # blank ACLs should result in no header
                     self.assert_(header not in resp.headers)
 
-    def test_add_acls_impossible_cases(self):
-        # For test coverage: verify that defensive coding does defend, in cases
-        # that shouldn't arise naturally
-
-        # add_acls should do nothing if REQUEST_METHOD isn't HEAD/GET/PUT/POST
-        resp = Response()
-        controller = proxy_server.AccountController(self.app, 'a')
-        resp.environ['PATH_INFO'] = '/a'
-        resp.environ['REQUEST_METHOD'] = 'OPTIONS'
-        controller.add_acls_from_sys_metadata(resp)
-        self.assertEqual(1, len(resp.headers))  # we always get Content-Type
-        self.assertEqual(2, len(resp.environ))
-
     def test_memcache_key_impossible_cases(self):
         # For test coverage: verify that defensive coding does defend, in cases
         # that shouldn't arise naturally

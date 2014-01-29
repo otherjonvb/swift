@@ -28,7 +28,8 @@ from swift.common.swob import HTTPBadRequest, HTTPForbidden, HTTPNotFound, \
 
 from swift.common.request_helpers import get_sys_meta_prefix
 from swift.common.middleware.acl import (
-    clean_acl, parse_acl, referrer_allowed, acls_from_account_info)
+    clean_acl, parse_acl, referrer_allowed, acls_from_account_info,
+    acls_from_request_headers)
 from swift.common.utils import cache_from_env, get_logger, \
     split_path, config_true_value, register_swift_info
 from swift.proxy.controllers.base import get_account_info
@@ -307,46 +308,27 @@ class TempAuth(object):
         """
         info = get_account_info(req.environ, self.app, swift_source='TA')
         try:
-            acls = acls_from_account_info(info)
-        except ValueError as e1:
-            self.logger.warn("Invalid ACL stored in metadata: %r" % e1)
+            return acls_from_account_info(info)
+        except ValueError as e:
+            self.logger.warn("Invalid ACL stored in metadata: %r" % e)
             return None
-        except NotImplementedError as e2:
-            self.logger.warn("ACL version exceeds middleware version: %r" % e2)
-            return None
-        return acls
 
     def extract_acl_and_report_errors(self, req):
         """
         Return a user-readable string indicating the errors in the input ACL,
         or None if there are no errors.
+
+        Side effect: Copies the ACL to system metadata in req.environ
         """
-        acl_header = 'x-account-access-control'
-        acl_data = req.headers.get(acl_header)
-        result = parse_acl(version=2, data=acl_data)
-        if (not result and acl_data not in ('', '{}')):
-            return 'Syntax error in input (%r)' % acl_data
-
-        tempauth_acl_keys = 'admin read-write read-only'.split()
-        for key in result:
-            # While it is possible to construct auth systems that collaborate
-            # on ACLs, TempAuth is not such an auth system.  At this point,
-            # it thinks it is authoritative.
-            if key not in tempauth_acl_keys:
-                return 'Key %r not recognized' % key
-
-        for key in tempauth_acl_keys:
-            if key not in result:
-                continue
-            if not isinstance(result[key], list):
-                return 'Value for key %r must be a list' % key
-            for grantee in result[key]:
-                if not isinstance(grantee, str):
-                    return 'Elements of %r list must be strings' % key
+        try:
+            acls_from_request_headers(req)  # ignoring return value, only
+                                            # looking for ValueErrors
+        except ValueError as e:
+            return str(e)
 
         # Everything looks fine, no errors found
         internal_hdr = get_sys_meta_prefix('account') + 'core-access-control'
-        req.headers[internal_hdr] = req.headers.pop(acl_header)
+        req.headers[internal_hdr] = req.headers.pop('x-account-access-control')
         return None
 
     def authorize(self, req):

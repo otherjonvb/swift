@@ -130,14 +130,14 @@ class TestACL(unittest.TestCase):
             ({}, None),
             ({'sysmeta': {}}, None),
             ({'sysmeta':
-              {'core-access-control': '{"VERSION":1,"admin":["a","b"]}'}},
+              {'core-access-control': '{"admin":["a","b"]}'}},
              {'admin': ['a', 'b'], 'read-write': [], 'read-only': []}),
             ({
                 'some-key': 'some-value',
                 'other-key': 'other-value',
                 'sysmeta': {
-                    'core-access-control': '{"VERSION":1,"admin":["a","b"],"r'
-                                           'ead-write":["c"],"read-only":[]}',
+                    'core-access-control': '{"admin":["a","b"],"read-write":'
+                                           '["c"],"read-only":[]}',
                 }},
              {'admin': ['a', 'b'], 'read-write': ['c'], 'read-only': []}),
         ]

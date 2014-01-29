@@ -6045,26 +6045,6 @@ class TestAccountControllerFakeGetResponse(unittest.TestCase):
                 h = resp.headers
                 self.assertEqual(None, h.get(ext_header))
 
-        # Verify that PUT/POST requests remap sysmeta headers from acct server
-        with patch_account_controller_method('make_requests'):
-            make_canned_response('PUT')
-            req = make_test_request('PUT')
-            resp = app.handle_request(req)
-
-            h = parse_acl(version=2, data=resp.headers.get(ext_header))
-            self.assertEqual(h['admin'], ['foo'])
-            self.assertEqual(h['read-write'], ['bar'])
-            self.assertEqual(h['read-only'], ['bas'])
-
-            make_canned_response('POST')
-            req = make_test_request('POST')
-            resp = app.handle_request(req)
-
-            h = parse_acl(version=2, data=resp.headers.get(ext_header))
-            self.assertEqual(h['admin'], ['foo'])
-            self.assertEqual(h['read-write'], ['bar'])
-            self.assertEqual(h['read-only'], ['bas'])
-
 
 class FakeObjectController(object):
 

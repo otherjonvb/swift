@@ -1049,7 +1049,7 @@ class TestAccountAcls(unittest.TestCase):
         req = self._make_request(target, headers=dict(good_headers, **update))
         resp = req.get_response(test_auth)
         self.assertEquals(resp.status_int, 400)
-        self.assertEquals(errmsg % "Key '", resp.body[:39])
+        self.assertEquals(errmsg % "Unknown access class: ", resp.body[:56])
 
         # acls with good keys but bad values also get a 400
         update = {'x-account-access-control': bad_value_acl}

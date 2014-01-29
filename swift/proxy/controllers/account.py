@@ -38,15 +38,23 @@ class AccountController(Controller):
             self.allowed_methods.remove('PUT')
             self.allowed_methods.remove('DELETE')
 
-    def add_acls_from_sys_metadata(self, resp):
-        if resp.environ['REQUEST_METHOD'] in ('HEAD', 'GET', 'PUT', 'POST'):
-            prefix = get_sys_meta_prefix('account') + 'core-'
-            name = 'access-control'
-            (extname, intname) = ('x-account-' + name, prefix + name)
-            acl_dict = parse_acl(version=2, data=resp.headers.pop(intname))
-            if acl_dict:  # treat empty dict as empty header
-                resp.headers[extname] = format_acl(
-                    version=2, acl_dict=acl_dict)
+    def check_for_bad_account_acls(self, req):
+        """
+        Ensure that no bad-citizen auth middleware put garbage (non-JSON)
+        account ACLs in sysmeta.  Strip the sysmeta if they did.
+        :returns: None if the account ACL was valid (or didn't exist)
+        :returns: HTTPBadRequest
+        """
+        inthdr = get_sys_meta_prefix('account') + 'core-access-control'
+        acl_data = req.headers.get(inthdr)
+        if acl_data:
+            acl_dict = parse_acl(version=2, data=acl_data)
+            if not acl_dict and acl_data != '{}':
+                # JSON parse error -- invalid ACL
+                del req.headers[inthdr]
+                msg = ('Invalid account ACL: %r\nPossible faulty auth system?'
+                       % acl_data)
+                return HTTPBadRequest(request=req, body=msg)
 
     def GETorHEAD(self, req):
         """Handler for HTTP GET/HEAD requests."""
@@ -67,10 +75,15 @@ class AccountController(Controller):
                 resp = account_listing_response(self.account_name, req,
                                                 get_listing_content_type(req))
         if req.environ.get('swift_owner'):
-            self.add_acls_from_sys_metadata(resp)
+            # Include X-Account-Access-Control header in response
+            exthdr = 'x-account-access-control'
+            inthdr = get_sys_meta_prefix('account') + 'core-access-control'
+            acl_dict = parse_acl(version=2, data=resp.headers.pop(inthdr))
+            if acl_dict:  # ignore empty dict as empty header
+                resp.headers[exthdr] = format_acl(version=2, acl_dict=acl_dict)
         else:
-            for header in self.app.swift_owner_headers:
-                resp.headers.pop(header, None)
+            for hdr in self.app.swift_owner_headers:
+                resp.headers.pop(hdr, None)
         return resp
 
     @public
@@ -92,10 +105,9 @@ class AccountController(Controller):
             self.app.account_ring.get_nodes(self.account_name)
         headers = self.generate_request_headers(req, transfer=True)
         clear_info_cache(self.app, req.environ, self.account_name)
-        resp = self.make_requests(
+        resp = self.check_for_bad_account_acls(req) or self.make_requests(
             req, self.app.account_ring, account_partition, 'PUT',
             req.swift_entity_path, [headers] * len(accounts))
-        self.add_acls_from_sys_metadata(resp)
         return resp
 
     @public
@@ -113,7 +125,7 @@ class AccountController(Controller):
             self.app.account_ring.get_nodes(self.account_name)
         headers = self.generate_request_headers(req, transfer=True)
         clear_info_cache(self.app, req.environ, self.account_name)
-        resp = self.make_requests(
+        resp = self.check_for_bad_account_acls(req) or self.make_requests(
             req, self.app.account_ring, account_partition, 'POST',
             req.swift_entity_path, [headers] * len(accounts))
         if resp.status_int == HTTP_NOT_FOUND and self.app.account_autocreate:
@@ -121,7 +133,6 @@ class AccountController(Controller):
             resp = self.make_requests(
                 req, self.app.account_ring, account_partition, 'POST',
                 req.swift_entity_path, [headers] * len(accounts))
-        self.add_acls_from_sys_metadata(resp)
         return resp
 
     @public
